@@ -1,0 +1,96 @@
+from keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import sklearn.metrics as sk_met
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+import pickle
+import tkinter as tk
+from tkinter import filedialog
+import cv2 as cv
+import pandas as pd
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.losses import sparse_categorical_crossentropy
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv('eng_-french.csv')
+
+input_texts = df['English words/sentences'].values
+target_texts = df['French words/sentences'].values
+
+input_texts=input_texts.astype(str)
+target_texts=target_texts.astype(str)
+
+tokenizer_input = Tokenizer()
+tokenizer_input.fit_on_texts(input_texts)
+input_sequences = tokenizer_input.texts_to_sequences(input_texts)
+
+tokenizer_target = Tokenizer()
+tokenizer_target.fit_on_texts(target_texts)
+target_sequences = tokenizer_target.texts_to_sequences(target_texts)
+
+max_sequence_length = 30 
+input_vocab_size = len(tokenizer_input.word_index) + 1
+target_vocab_size = len(tokenizer_target.word_index) + 1
+
+input_sequences = pad_sequences(input_sequences, maxlen=max_sequence_length, padding='post')
+target_sequences = pad_sequences(target_sequences, maxlen=max_sequence_length, padding='post')
+
+x_train, x_test, y_train, y_test = train_test_split(input_sequences, target_sequences, test_size=0.2, random_state=42)
+y_test=y_test.reshape(y_test.shape[0],-1,1)
+y_train=y_train.reshape(y_train.shape[0],-1,1)
+
+def translate_lstm(input_vocab_size,target_vocab_size,max_sequence_length,input_shape):
+    input= tf.keras.Input(shape=input_shape[1:])
+    e1= tf.keras.layers.Embedding(input_dim=input_vocab_size,output_dim=500,mask_zero=True,input_length=max_sequence_length)(input)
+    lstm1= tf.keras.layers.LSTM(units=150)(e1)
+    repeat=tf.keras.layers.RepeatVector(max_sequence_length)(lstm1)
+    lstm2= tf.keras.layers.LSTM(units=150,return_sequences=True)(repeat)
+    relu= tf.keras.layers.TimeDistributed(Dense(150, activation='relu'))(lstm2)
+    dropout= tf.keras.layers.Dropout(0.3)(relu)
+    softmaxout= tf.keras.layers.TimeDistributed(Dense(target_vocab_size, activation='softmax'))(dropout)
+    model=tf.keras.Model(input,softmaxout)
+    return model
+
+def translate_rnn(input_vocab_size,target_vocab_size,max_sequence_length,input_shape):
+    input= tf.keras.Input(shape=input_shape[1:])
+    e1= tf.keras.layers.Embedding(input_dim=input_vocab_size,output_dim=500,mask_zero=True,input_length=max_sequence_length)(input)
+    lstm1= tf.keras.layers.SimpleRNN(units=150)(e1)
+    repeat=tf.keras.layers.RepeatVector(max_sequence_length)(lstm1)
+    lstm2= tf.keras.layers.SimpleRNN(units=150,return_sequences=True)(repeat)
+    relu= tf.keras.layers.TimeDistributed(Dense(150, activation='relu'))(lstm2)
+    dropout= tf.keras.layers.Dropout(0.3)(relu)
+    softmaxout= tf.keras.layers.TimeDistributed(Dense(target_vocab_size, activation='softmax'))(dropout)
+    model=tf.keras.Model(input,softmaxout)
+    return model
+
+def translate_gru(input_vocab_size,target_vocab_size,max_sequence_length,input_shape):
+    input= tf.keras.Input(shape=input_shape[1:])
+    e1= tf.keras.layers.Embedding(input_dim=input_vocab_size,output_dim=500,mask_zero=True,input_length=max_sequence_length)(input)
+    lstm1= tf.keras.layers.GRU(units=150)(e1)
+    repeat=tf.keras.layers.RepeatVector(max_sequence_length)(lstm1)
+    lstm2= tf.keras.layers.GRU(units=150,return_sequences=True)(repeat)
+    relu= tf.keras.layers.TimeDistributed(Dense(150, activation='relu'))(lstm2)
+    dropout= tf.keras.layers.Dropout(0.3)(relu)
+    softmaxout= tf.keras.layers.TimeDistributed(Dense(target_vocab_size, activation='softmax'))(dropout)
+    model=tf.keras.Model(input,softmaxout)
+    return model
+
+
+model=translate_rnn(input_vocab_size,target_vocab_size,max_sequence_length,x_train.shape)
+model.compile(optimizer='Adam',metrics=['accuracy'],loss=sparse_categorical_crossentropy)
+model.summary()
+
+model=translate_gru(input_vocab_size,target_vocab_size,max_sequence_length,x_train.shape)
+model.compile(optimizer='Adam',metrics=['accuracy'],loss=sparse_categorical_crossentropy)
+model.summary()
+
+model=translate_lstm(input_vocab_size,target_vocab_size,max_sequence_length,x_train.shape)
+model.compile(optimizer='Adam',metrics=['accuracy'],loss=sparse_categorical_crossentropy)
+model.summary()
+
